@@ -1,6 +1,7 @@
 clear all;
 
-number_of_subjects=[1 2 3 4 5 6 7 8 9 10 11 12 14 15 16 18 19 20];
+% dont use 1, 17
+number_of_subjects=[1 2 3 4 5 6 7 8 9 10 11 12 14 15 16 18 19 20 24 25 26 28];
 
 for subject_number = number_of_subjects
     try
@@ -31,7 +32,7 @@ function[] = merge_subject(subject_number)
     fprintf('\n\n\nCurrent subject: no. %02d.\n', subject_number);
 
     filename_csv =  ['../data/PsychoPy/' num2str(subject_number,'%02d') '_LAC-paradigma_2018_Dec.csv'];
-    filename_mat = ['../data/Labchart-MAT/' num2str(subject_number,'%02d') '.mat'];
+    filename_mat = ['../data/LabChart-MAT/' num2str(subject_number,'%02d') '.mat'];
     filename_table = ['../data/export/merged-csv/' num2str(subject_number,'%02d') '_100Hz-merged.csv'];
     filename_leda = ['../data/export/ledalab-mat/' num2str(subject_number,'%02d') '_100HZ-LEDALAB.mat'];
     filename_log = ['../data/export/log/' num2str(subject_number,'%02d') '_intensity_log.txt'];
@@ -107,7 +108,7 @@ function[] = merge_subject(subject_number)
 
     %% Check if the time difference is reasonable
     
-    if time_deltas(2) > 60*10
+    if time_deltas(1) > 60*10
         fprintf('Time difference between first event and Labchart start is more than 10 minutes. It is %f minutes.\n', (time_deltas(1)/60))
         ME = MException('Time difference too big.')
         throw(ME)
@@ -167,8 +168,22 @@ function[] = merge_subject(subject_number)
     %% Create Ledalab struct
     create_ledalab_struct(channel3, time_deltas, table_sorted, filename_leda)
 
+    %% Create Ledalab struct without baseline event
+    
+    % remove first time_delta
+    time_deltas = time_deltas(2:end);
+    
+    % remove first table row    
+    table_sorted([1],:) = [];
+    
+    % change filename
+    filename_leda = ['../data/export/ledalab-mat_no-baseline/' num2str(subject_number,'%02d') '_100HZ-LEDALAB-no-baseline.mat'];
 
     
+    create_ledalab_struct(channel3, time_deltas, table_sorted, filename_leda)
+
+
+    %% Clear subject
     disp('Finished subject, clearing...')
     diary(filename_log);
     diary off;
@@ -216,7 +231,7 @@ function[table_unsorted] = read_psychopy(filename_csv)
 
     %% Format string for each line of text:
 
-    formatSpec = '%s%f%s%s%s%s%f%f%f%f%s%s%s%s%s%s%f%s%s%s%s%s%s%s%s%s%s%s%f%s%f%s%s%f%f%f%f%f%f%f%f%f%f%s%s%s%s%s%s%s%s%s%s%s%[^\n\r]';
+    formatSpec = "%s%f%s%s%s%s%f%f%f%f%s%s%s%s%s%s%f%s%s%s%s%s%s%s%s%s%s%s%f%s%s%s%s%f%f%f%f%f%f%f%f%f%f%s%s%s%s%s%s%s%s%s%s%s%[^\n\r]";
 
     %% Open the text file.
     disp('Opening CSV file...')
@@ -259,8 +274,8 @@ function[table_unsorted] = read_psychopy(filename_csv)
 
 end
 
-    function[] = labchart_comments_macro(table_sorted, time_deltas, filename_vbs)
-%%%%% CREATE DATA FOR LABCHART COMMENTS %%%%%%
+function[] = labchart_comments_macro(table_sorted, time_deltas, filename_vbs)
+%% CREATE DATA FOR LABCHART COMMENTS
 
     file_vbs = fopen(filename_vbs,'w');
     fprintf(file_vbs, 'times = Array(');
