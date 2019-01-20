@@ -1,19 +1,23 @@
 clear all;
 
 % dont use 1, 17
-number_of_subjects=[1 2 3 4 5 6 7 8 9 10 11 12 14 15 16 18 19 20 24 25 26 28];
+number_of_subjects=[2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 19 20 22 23 24 25 26 27 28];
+length(number_of_subjects)
+% not sure: 16 (ibu)
+% ausschluss: 1, 17, 21
+
 
 for subject_number = number_of_subjects
     try
         merge_subject(subject_number)
     catch exception
-         disp('CAUGHT EXCEPTION');
-         fprintf('Problem merging: no. %02d\n', subject_number);
-         fprintf('Exception: %s\n', exception.message);
-         disp('Continuing with the next subject.');
-         %clearvars -except choice;
-         continue;
-    end
+        disp('CAUGHT EXCEPTION');
+        fprintf('Problem merging: no. %02d\n', subject_number);
+        fprintf('Exception: %s\n', exception.message);
+        disp('Continuing with the next subject.');
+        %clearvars -except choice;
+        continue;
+   end
 end
 
 disp('Finished all, clearing...')
@@ -32,11 +36,13 @@ function[] = merge_subject(subject_number)
     fprintf('\n\n\nCurrent subject: no. %02d.\n', subject_number);
 
     filename_csv =  ['../data/PsychoPy/' num2str(subject_number,'%02d') '_LAC-paradigma_2018_Dec.csv'];
-    filename_mat = ['../data/LabChart-MAT/' num2str(subject_number,'%02d') '.mat'];
-    filename_table = ['../data/export/merged-csv/' num2str(subject_number,'%02d') '_100Hz-merged.csv'];
-    filename_leda = ['../data/export/ledalab-mat/' num2str(subject_number,'%02d') '_100HZ-LEDALAB.mat'];
-    filename_log = ['../data/export/log/' num2str(subject_number,'%02d') '_intensity_log.txt'];
-    filename_vbs = ['../data/export/labchart-macro/' num2str(subject_number,'%02d') '_labchart-macro.vbs'];
+    filename_mat = ['../data/LabChart-MAT+Pulse/' num2str(subject_number,'%02d') '.mat'];
+    filename_table = ['../data/export3/merged-csv/' num2str(subject_number,'%02d') '_100Hz-merged.csv'];
+    filename_leda = ['../data/export3/ledalab-mat/' num2str(subject_number,'%02d') '_100HZ-LEDALAB.mat'];
+    filename_log = ['../data/export3/log/' num2str(subject_number,'%02d') '_intensity_log.txt'];
+    filename_vbs = ['../data/export3/labchart-macro/' num2str(subject_number,'%02d') '_labchart-macro.vbs'];
+    filename_bpm = ['../data/export3/stimuli-bpm/' num2str(subject_number,'%02d') '_Stimuli-BPM.csv'];
+
 
 
     %% Read psychopy csv and create an unsorted table
@@ -164,21 +170,20 @@ function[] = merge_subject(subject_number)
     %T = table(channel3, events, odors);
     % write table
     %writetable(T,filename_table,'Delimiter',';')
+    
+    %% Create average BPM after stimuli table
+    create_bpm_table(channel5, time_deltas, table_sorted, filename_bpm)
 
     %% Create Ledalab struct
     create_ledalab_struct(channel3, time_deltas, table_sorted, filename_leda)
 
     %% Create Ledalab struct without baseline event
-    
     % remove first time_delta
     time_deltas = time_deltas(2:end);
-    
     % remove first table row    
     table_sorted([1],:) = [];
-    
     % change filename
-    filename_leda = ['../data/export/ledalab-mat_no-baseline/' num2str(subject_number,'%02d') '_100HZ-LEDALAB-no-baseline.mat'];
-
+    filename_leda = ['../data/export3/ledalab-mat_no-baseline/' num2str(subject_number,'%02d') '_100HZ-LEDALAB-no-baseline.mat'];
     
     create_ledalab_struct(channel3, time_deltas, table_sorted, filename_leda)
 
@@ -188,6 +193,34 @@ function[] = merge_subject(subject_number)
     diary(filename_log);
     diary off;
 end
+
+function[] = create_bpm_table(bpm_channel, time_deltas, table_sorted, filename_bpm)
+    len = height(table_sorted);
+
+    for i=1:len
+        start_time(i) = (round(time_deltas(i)*100));
+        average_bpms(i) = mean(bpm_channel(start_time(i):start_time(i)+60*100));
+    end
+    
+    odors = table_sorted.odor;
+    
+    % add baseline 5min measurement to the end of the table
+    start_time(len+1) = 0;
+    average_bpms(len+1) = -1;
+    odors(len+1) = '-';
+    start_time(len+2) = start_time(1);
+    average_bpms(len+2) = mean(bpm_channel(start_time(1):start_time(1)+5*60*100));
+    odors(len+2) = 'BASELINE_5min_average_value';
+   
+    % set time to minutes
+    start_time = start_time/100/60;
+    
+    numbers = [1:len+2];
+    T = table(numbers', start_time', odors, average_bpms');
+    T.Properties.VariableNames = {'no' 'start_time_in_min' 'odor' 'average_bpm_60s_after_stimuli'};
+    writetable(T,filename_bpm,'Delimiter',';');
+end
+
 
 function[] = create_ledalab_struct(skin_channel, time_deltas, table_sorted, filename_leda)
     disp("Building Ledalab struct ...")
