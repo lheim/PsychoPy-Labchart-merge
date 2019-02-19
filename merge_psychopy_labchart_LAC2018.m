@@ -1,10 +1,13 @@
 clear all;
 
 % dont use 1, 17
-number_of_subjects=[2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 19 20 22 23 24 25 26 27 28];
-length(number_of_subjects)
+number_of_subjects=[2 3 4 5 6 8 9 10 11 12 13 14 15 16 18 19 20 22 23 24 25 26 27 28];
+%length(number_of_subjects);
 % not sure: 16 (ibu)
 % ausschluss: 1, 17, 21
+
+% GERADE EBEN IST 7 RAUS!!
+%number_of_subjects=[2];
 
 
 for subject_number = number_of_subjects
@@ -42,6 +45,7 @@ function[] = merge_subject(subject_number)
     filename_log = ['../data/export3/log/' num2str(subject_number,'%02d') '_intensity_log.txt'];
     filename_vbs = ['../data/export3/labchart-macro/' num2str(subject_number,'%02d') '_labchart-macro.vbs'];
     filename_bpm = ['../data/export3/stimuli-bpm/' num2str(subject_number,'%02d') '_Stimuli-BPM.csv'];
+    filename_resp = ['../data/export3/stimuli-respiration/' num2str(subject_number,'%02d') '_Stimuli-resp.csv'];
 
 
 
@@ -173,6 +177,9 @@ function[] = merge_subject(subject_number)
     
     %% Create average BPM after stimuli table
     create_bpm_table(channel5, time_deltas, table_sorted, filename_bpm)
+    
+    %% Create Resp after stimuli table
+    create_resp_table(channel2, time_deltas, table_sorted, filename_resp)
 
     %% Create Ledalab struct
     create_ledalab_struct(channel3, time_deltas, table_sorted, filename_leda)
@@ -184,7 +191,7 @@ function[] = merge_subject(subject_number)
     table_sorted([1],:) = [];
     % change filename
     filename_leda = ['../data/export3/ledalab-mat_no-baseline/' num2str(subject_number,'%02d') '_100HZ-LEDALAB-no-baseline.mat'];
-    
+    % create ledalab struct
     create_ledalab_struct(channel3, time_deltas, table_sorted, filename_leda)
 
 
@@ -194,12 +201,143 @@ function[] = merge_subject(subject_number)
     diary off;
 end
 
+
+%% --------------------------------------------------
+%% Sub-Functions
+
+
+function[] = create_resp_table(resp_channel, time_deltas, table_sorted, filename_resp)
+    len = height(table_sorted);
+    
+    
+    % Trapezoidal numerical integration
+    % https://de.mathworks.com/help/matlab/ref/trapz.html
+%     Q = trapz(resp_channel)
+%     
+%     %% Plot time-domain signal
+%     subplot(2,1,1);
+%     %plot(resp_channel);
+%     ylabel('Amplitude'); xlabel('Time (secs)');
+%     axis tight;
+%     title('Resp');
+%     % Choose FFT size and calculate spectrum
+%     Nfft = 1024;
+%     fsamp = 100;
+%     [Pxx,f] = pwelch(resp_channel,gausswin(Nfft),Nfft/2,Nfft,fsamp);
+%     % Plot frequency spectrum
+%     subplot(2,1,2);
+%     %plot(f,Pxx);
+%     ylabel('PSD'); xlabel('Frequency (Hz)');
+%     grid on;
+%     % Get frequency estimate (spectral peak)
+%     [~,loc] = max(Pxx);
+%     FREQ_ESTIMATE = f(loc)
+%     title(['Frequency estimate = ',num2str(FREQ_ESTIMATE),' Hz']);
+%     
+    
+    % calc maxima and minima
+    % calc frequency
+    
+    Nfft = 1024;
+    fsamp = 100;
+    
+    
+    for i=1:len
+        start_time(i) = (round(time_deltas(i)*100));
+        
+        current_resp_signal = resp_channel(start_time(i):start_time(i)+60*100);
+        
+        integral_resp(i) = trapz(current_resp_signal);
+        %[Pxx,f] = pwelch(resp_channel(start_time(i):start_time(i)+60*100),gausswin(Nfft),Nfft/2,Nfft,fsamp);
+        [Pxx,f] = pwelch(current_resp_signal);
+        [~,loc] = max(Pxx);
+        freq_estimate(i) = f(loc);
+        
+        [peak_heigth, peak_time] = findpeaks(current_resp_signal, 'MinPeakProminence', 0.05, 'MinPeakDistance', 2*100);
+        out_count(i) = length(peak_time);
+        average_peak_height(i) = mean(peak_heigth);
+        max_peak_height(i) = max(peak_heigth);
+        
+        
+        % IN VOLUME
+        current_resp_signal(current_resp_signal < 0) = 0;
+        integral_pos_resp(i) = trapz(current_resp_signal);
+
+        
+        current_resp_signal = resp_channel(start_time(i):start_time(i)+60*100);
+        % OUT VOLUME
+        current_resp_signal(current_resp_signal > 0) = 0;
+        integral_neg_resp(i) = trapz(current_resp_signal);
+
+    end
+    
+%     hold all
+%     figure
+%     plot(resp_channel(start_time(1):start_time(1)+60*100));
+%     figure
+%     plot(resp_channel(start_time(2):start_time(2)+60*100));
+%     figure
+%     plot(resp_channel(start_time(3):start_time(3)+60*100));
+%     figure
+%     plot(resp_channel(start_time(4):start_time(4)+60*100));
+%     
+    
+    odors = table_sorted.odor;
+    
+    % add baseline 5min measurement to the end of the table
+    start_time(len+1) = 0;
+    integral_resp(len+1) = -1;
+    odors(len+1) = '-';
+    freq_estimate(len+1) = -1;
+    out_count(len+1) = -1;
+    average_peak_height(len+1) = -1;
+    max_peak_height(len+1) = -1;
+    
+    integral_pos_resp(len+1) = -1;
+    integral_neg_resp(len+1) = -1;
+
+    current_resp_signal = resp_channel(start_time(1):start_time(1)+5*60*100);
+    start_time(len+2) = start_time(1);
+    integral_resp(len+2) = trapz(current_resp_signal);
+    odors(len+2) = 'BASELINE_5min_average_value';
+    
+    [Pxx,f] = pwelch(current_resp_signal,gausswin(Nfft),Nfft/2,Nfft,fsamp);
+    [~,loc] = max(Pxx);
+    freq_estimate(len+2) = f(loc);
+    
+    [peak_heigth, peak_time] = findpeaks(current_resp_signal, 'MinPeakProminence', 0.05, 'MinPeakDistance', 2*100);
+    out_count(len+2) = length(peak_time);
+    average_peak_height(len+2) = mean(peak_heigth);
+    max_peak_height(len+2) = max(peak_heigth);
+
+    % NEG and POS integral
+    current_resp_signal(current_resp_signal < 0) = 0;
+    integral_pos_resp(len+2) = trapz(current_resp_signal);
+
+        
+    % OUT VOLUME
+    current_resp_signal = resp_channel(start_time(1):start_time(1)+5*60*100);
+    current_resp_signal(current_resp_signal > 0) = 0;
+    integral_neg_resp(len+2) = trapz(current_resp_signal);
+ 
+   
+    % set time to minutes
+    start_time = start_time/100/60;
+    
+    numbers = [1:len+2];
+    T = table(numbers', start_time', odors, integral_resp', integral_pos_resp', integral_neg_resp', freq_estimate', out_count', average_peak_height', max_peak_height');
+    T.Properties.VariableNames = {'no' 'start_time_in_min' 'odor' 'integral' 'pos_integral' 'neg_integral' 'freq_estimate' 'out_count' 'average_peak_height', 'max_peak_height'};
+    writetable(T,filename_resp,'Delimiter',';');
+    
+end
+
 function[] = create_bpm_table(bpm_channel, time_deltas, table_sorted, filename_bpm)
     len = height(table_sorted);
 
     for i=1:len
         start_time(i) = (round(time_deltas(i)*100));
         average_bpms(i) = mean(bpm_channel(start_time(i):start_time(i)+60*100));
+        average_bpms_before(i) = mean(bpm_channel(start_time(i)-3*100:start_time(i)));
     end
     
     odors = table_sorted.odor;
@@ -207,17 +345,24 @@ function[] = create_bpm_table(bpm_channel, time_deltas, table_sorted, filename_b
     % add baseline 5min measurement to the end of the table
     start_time(len+1) = 0;
     average_bpms(len+1) = -1;
+    average_bpms_before(len+1) = -1;
     odors(len+1) = '-';
     start_time(len+2) = start_time(1);
     average_bpms(len+2) = mean(bpm_channel(start_time(1):start_time(1)+5*60*100));
+    average_bpms_before(len+2) = -1;
     odors(len+2) = 'BASELINE_5min_average_value';
    
     % set time to minutes
     start_time = start_time/100/60;
     
+    average_bpms = round(average_bpms, 2);
+    average_bpms_before = round(average_bpms_before, 2);
+    %average_bpms = num2str(average_bpms, '%.2d');
+    %average_bpms = cellstr(average_bpms);
+    
     numbers = [1:len+2];
-    T = table(numbers', start_time', odors, average_bpms');
-    T.Properties.VariableNames = {'no' 'start_time_in_min' 'odor' 'average_bpm_60s_after_stimuli'};
+    T = table(numbers', start_time', odors, average_bpms', average_bpms_before');
+    T.Properties.VariableNames = {'no' 'start_time_in_min' 'odor' 'average_bpm_60s_after_stimuli' 'average_bpm_3s_before_stimuli'};
     writetable(T,filename_bpm,'Delimiter',';');
 end
 
